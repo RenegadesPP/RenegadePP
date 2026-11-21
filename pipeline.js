@@ -74,8 +74,10 @@
       if (t && t.category === fields.category) return { ticket: t, method: "AI semantic match (cross-language)" };
     }
     // 2. Same category within ~120 m (when both have GPS).
-    if (geo) {
-      const t = open.find(x => x.category === fields.category && x.geo && haversineM(geo, x.geo) < 120);
+    // Only trust precise fixes (phone GPS); laptop Wi-Fi/IP locations can be kilometres off.
+    const precise = g => g && (g.acc == null || g.acc <= 100);
+    if (precise(geo)) {
+      const t = open.find(x => x.category === fields.category && precise(x.geo) && haversineM(geo, x.geo) < 120);
       if (t) return { ticket: t, method: "Same category within 120 m" };
     }
     // 3. Word overlap of summary + location + original text.

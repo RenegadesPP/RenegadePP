@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..100,500..800&family=Noto+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Kannada:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
@@ -21,9 +21,10 @@
     </div>
     <nav class="tabs" role="tablist">
       <button class="tab is-active" role="tab" data-view="report" aria-selected="true">Report an issue</button>
-      <button class="tab" role="tab" data-view="dashboard" aria-selected="false">Officer dashboard <span class="tab-count" id="openCount">0</span></button>
+      <button class="tab" role="tab" data-view="track" aria-selected="false">Track my complaint</button>
+      <button class="tab" role="tab" data-view="dashboard" aria-selected="false">Officer login <span class="tab-count" id="openCount" hidden>0</span></button>
     </nav>
-    <button class="engine-pill" id="enginePill" title="Open settings">Offline rules</button>
+    <span class="engine-pill" id="enginePill">Connecting…</span>
   </header>
 
   <!-- ============ CITIZEN VIEW ============ -->
@@ -53,8 +54,11 @@
             <span id="photoHint">Add a photo <small>(optional)</small></span>
           </label>
           <div class="attach-side">
-            <button type="button" class="btn ghost" id="geoBtn">Use my location</button>
-            <div class="geo-status" id="geoStatus"></div>
+            <div class="geo-box" id="geoBox">
+              <div class="field-label" style="margin:0">Your location</div>
+              <div class="geo-status" id="geoStatus">Not added yet</div>
+              <button type="button" class="btn ghost" id="geoBtn">Use my location</button>
+            </div>
             <button type="button" class="btn link" id="clearPhoto" hidden>Remove photo</button>
           </div>
         </div>
@@ -85,12 +89,46 @@
     </section>
   </main>
 
+  <!-- ============ TRACK VIEW ============ -->
+  <main id="view-track" class="view" hidden>
+    <section class="panel narrow">
+      <h1 class="h-display small">Track my complaint</h1>
+      <form id="trackForm" class="row">
+        <input type="text" id="trackId" placeholder="Ticket number, e.g. CL-1001" aria-label="Ticket number" style="flex:1">
+        <button class="btn primary" type="submit">Check status</button>
+      </form>
+      <p class="form-error" id="trackError" role="alert"></p>
+      <div id="trackOut"></div>
+      <h2 class="sub">Complaints from this phone</h2>
+      <ul class="mine" id="myList"></ul>
+    </section>
+  </main>
+
+  <!-- ============ OFFICER LOGIN ============ -->
+  <main id="view-login" class="view" hidden>
+    <section class="panel narrow">
+      <h1 class="h-display small">Officer login</h1>
+      <p class="lede">For municipal staff. Each department officer sees only their own department's tickets.</p>
+      <form id="loginForm" autocomplete="on">
+        <label class="field-label" for="loginUser">Username</label>
+        <input type="text" id="loginUser" autocomplete="username" autocapitalize="none">
+        <label class="field-label" for="loginPass">Password</label>
+        <input type="password" id="loginPass" autocomplete="current-password">
+        <button class="btn primary big" type="submit" id="loginBtn">Log in</button>
+        <p class="form-error" id="loginError" role="alert"></p>
+      </form>
+    </section>
+  </main>
+
   <!-- ============ OFFICER VIEW ============ -->
   <main id="view-dashboard" class="view" hidden>
     <section class="kpis" id="kpis"></section>
     <section class="panel board">
       <div class="board-head">
-        <h1 class="h-display small">Tickets by priority</h1>
+        <div>
+          <h1 class="h-display small">Tickets by priority</h1>
+          <div class="who" id="whoAmI"></div>
+        </div>
         <div class="filters">
           <select id="fDept" aria-label="Department"><option value="">All departments</option></select>
           <select id="fSev" aria-label="Severity"><option value="">All severities</option></select>
@@ -104,9 +142,12 @@
           <input type="search" id="fSearch" placeholder="Search tickets" aria-label="Search tickets">
         </div>
         <div class="board-actions">
-          <button class="btn ghost" id="batchBtn">Triage all samples</button>
+          <button class="btn ghost" id="refreshBtn">Refresh</button>
+          <button class="btn ghost admin-only" id="batchBtn">Load demo complaints</button>
           <button class="btn ghost" id="csvBtn">Export CSV</button>
-          <button class="btn link danger" id="resetBtn">Clear all tickets</button>
+          <button class="btn link danger admin-only" id="resetBtn">Clear all tickets</button>
+          <span class="sync" id="syncNote"></span>
+          <button class="btn link" id="logoutBtn">Log out</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -129,36 +170,11 @@
     <form method="dialog" class="dlg-actions"><button class="btn ghost">Close</button></form>
   </dialog>
 
-  <!-- Settings -->
-  <dialog id="settingsDlg" class="dlg">
-    <form method="dialog" id="settingsForm">
-      <h2>Settings</h2>
-      <label class="field-label" for="sCity">Municipal body name</label>
-      <input id="sCity" type="text">
-      <label class="field-label" for="sKey">Gemini API key</label>
-      <input id="sKey" type="password" placeholder="Paste key from aistudio.google.com/apikey">
-      <p class="hint">Stored only in this browser. Without a key, CivicLens uses its offline rule engine.</p>
-      <label class="field-label" for="sModel">Gemini model</label>
-      <input id="sModel" list="modelList" type="text">
-      <datalist id="modelList"></datalist>
-      <label class="check"><input type="checkbox" id="sOffline"> Use offline rules only</label>
-      <div class="row">
-        <button type="button" class="btn ghost" id="testKeyBtn">Test connection</button>
-        <span class="hint" id="testKeyOut"></span>
-      </div>
-      <div class="dlg-actions">
-        <button value="cancel" class="btn link">Cancel</button>
-        <button value="save" class="btn primary" id="saveSettings">Save</button>
-      </div>
-    </form>
-  </dialog>
-
-  <script src="js/config.js"></script>
-  <script src="js/prompt.js"></script>
-  <script src="js/rules.js"></script>
-  <script src="js/pipeline.js"></script>
-  <script src="js/samples.js"></script>
-  <script src="js/ai.js"></script>
-  <script src="js/app.js"></script>
+  <script src="server-url.js"></script>
+  <script src="config.js"></script>
+  <script src="rules.js"></script>
+  <script src="pipeline.js"></script>
+  <script src="samples.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
