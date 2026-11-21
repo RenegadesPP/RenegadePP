@@ -67,12 +67,27 @@
   }
 
   // ---------- complaint form ----------
+  // Draft autosave + character counter with a landmark tip
+  const DRAFT = "cl.draft";
+  const LANDMARK = /\b(near|opp|opposite|beside|behind|front|road|street|cross|main|nagar|layout|colony|school|temple|hospital|bus stop|park|market|circle|junction)\b|నగర్|ರಸ್ತೆ|नगर|गली|தெரு|நகர்/i;
+  function updateCount() {
+    const v = $("#complaintText").value;
+    $("#textCount").textContent = `${v.length} / 3000`;
+    const tip = $("#textTip");
+    if (!v.trim()) { tip.textContent = "Tip: mention a landmark — shop, school, bus stop"; tip.className = "tip"; }
+    else if (!LANDMARK.test(v) && !geo) { tip.textContent = "Add a landmark so the team can find it"; tip.className = "tip"; }
+    else { tip.textContent = "Draft saved on this phone"; tip.className = "draft-note"; }
+  }
+  $("#complaintText").value = localStorage.getItem(DRAFT) || "";
+  $("#complaintText").addEventListener("input", () => { localStorage.setItem(DRAFT, $("#complaintText").value); updateCount(); });
+  updateCount();
+
   $("#voiceLang").innerHTML = C.LANGUAGES.map(l => `<option value="${l.code}">${l.label}</option>`).join("");
   $("#samplePicker").innerHTML += window.CL_SAMPLES.map((s, i) => `<option value="${i}">${esc(s.label)}</option>`).join("");
   $("#samplePicker").addEventListener("change", e => {
     const s = window.CL_SAMPLES[e.target.value];
     if (!s) return;
-    $("#complaintText").value = s.text; $("#voiceLang").value = s.lang; e.target.value = "";
+    $("#complaintText").value = s.text; $("#voiceLang").value = s.lang; e.target.value = ""; updateCount();
   });
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -87,6 +102,7 @@
     rec.onresult = e => {
       const said = Array.from(e.results).map(r => r[0].transcript).join(" ");
       const ta = $("#complaintText"); ta.value = (ta.value ? ta.value + " " : "") + said;
+      localStorage.setItem(DRAFT, ta.value); updateCount();
     };
     rec.onend = () => { rec = null; $("#micBtn").classList.remove("is-live"); $("#micBtn").lastChild.textContent = "Speak"; };
     rec.onerror = e => { $("#formError").textContent = `Voice input stopped: ${e.error}`; };
@@ -203,7 +219,13 @@
 
   function finish(out) {
     $("#ticketOut").innerHTML = receipt(out);
-    $("#complaintText").value = ""; clearPhoto(); lastSubmission = null;
+    $("#complaintText").value = ""; localStorage.removeItem(DRAFT); updateCount(); clearPhoto(); lastSubmission = null;
+    const copyBtn = $("#copyId");
+    if (copyBtn) copyBtn.onclick = async () => {
+      try { await navigator.clipboard.writeText(copyBtn.dataset.id); copyBtn.textContent = "Copied ✓"; }
+      catch (_) { copyBtn.textContent = copyBtn.dataset.id; }
+      setTimeout(() => { copyBtn.textContent = "Copy number"; }, 1800);
+    };
     if (window.innerWidth < 900) $("#ticketOut").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -256,6 +278,10 @@
       </dl>
       ${t.missingInfo ? `<p class="ask"><strong>Please also tell us:</strong> ${esc(t.missingInfo)}</p>` : ""}
       <div class="reply"><div class="reply-label">Message for you</div><p>${esc(reply)}</p></div>
+      ${t.localOnly ? "" : `<div class="receipt-actions">
+        <button type="button" class="btn ghost" id="copyId" data-id="${esc(t.id)}">Copy number</button>
+        <a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`I reported a civic problem to the municipality: ${t.summary}. Complaint number ${t.id}. Track it here: ${location.origin}${location.pathname}`)}">Share on WhatsApp</a>
+      </div>`}
       <p class="hint">Keep your complaint number <strong>${esc(t.id)}</strong>. You'll see every status change under “My complaints”. We can't promise a completion date; the status will change when the team acts on it.</p>
     </article>`;
   }

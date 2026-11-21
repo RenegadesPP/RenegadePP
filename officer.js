@@ -8,6 +8,10 @@
   let session = load(SESSION, null, sessionStorage);   // { token, name, dept }
   let boardTickets = [];
   let busy = false;
+  let seenIds = null;          // ticket ids already shown (null until first load)
+  let seenReports = {};        // id → report count, to spot new duplicate reports
+  let unseen = 0;
+  const baseTitle = document.title;
 
   function showView() {
     $("#view-login").hidden = !!session;
@@ -35,7 +39,7 @@
   });
   function logout(msg) {
     if (session && U.HAS_SERVER) api("logout", { token: session.token }).catch(() => {});
-    session = null; sessionStorage.removeItem(SESSION); boardTickets = [];
+    session = null; sessionStorage.removeItem(SESSION); boardTickets = []; seenIds = null; seenReports = {};
     showView();
     if (msg) $("#loginError").textContent = msg;
   }
@@ -59,6 +63,7 @@
     try {
       const r = await api("list", { token: session.token }, 30000);
       boardTickets = r.tickets.map(t => ({ ...t, status: U.normStatus(t.status) }));
+      announceNew();
       if (r.city) $("#cityLabel").textContent = r.city;
       $("#syncNote").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
       renderBoard();
@@ -68,6 +73,75 @@
     }
   }
   $("#refreshBtn").addEventListener("click", () => loadBoard());
+
+  // ---------- live alerts ----------
+  const newIds = new Set();
+  function announceNew() {
+    if (seenIds === null) {
+      seenIds = new Set(boardTickets.map(t => t.id));
+      boardTickets.forEach(t => { seenReports[t.id] = t.reports.length; });
+      return;
+    }
+    boardTickets.forEach(t => {
+      if (!seenIds.has(t.id)) {
+        seenIds.add(t.id); newIds.add(t.id); unseen++;
+        toast(t, `New ${t.severity} complaint ${t.id}`, `${t.summary} → ${deptShort(t.department)}`);
+      } else if (t.reports.length > (seenReports[t.id] || 0)) {
+        newIds.add(t.id);
+        toast(t, `Another citizen reported ${t.id}`, `${t.reports.length} reports now · ${t.summary}`);
+      }
+      seenReports[t.id] = t.reports.length;
+    });
+    document.title = unseen && document.hidden ? `(${unseen}) ${baseTitle}` : baseTitle;
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { unseen = 0; document.title = baseTitle; } });
+  function toast(t, title, body) {
+    const el = document.createElement("div");
+    el.className = `toast ${sevClass(t.severity)}`;
+    el.innerHTML = `<strong>${esc(title)}</strong>${esc(body)}`;
+    el.onclick = () => { openDetail(t.id); el.remove(); };
+    $("#toasts").appendChild(el);
+    setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 320); }, 7000);
+  }
+
+  // ---------- insights ----------
+  function bars(title, counts, label) {
+    const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const max = Math.max(1, ...rows.map(r => r[1]));
+    return `<div class="ins-card"><h3>${title}</h3>${rows.length ? rows.map(([k, v]) =>
+      `<div class="bar-row"><span title="${esc(label(k))}">${esc(label(k))}</span><div class="bar"><i style="width:${(v / max) * 100}%"></i></div><b>${v}</b></div>`).join("")
+      : "<p class='hint'>No open tickets.</p>"}</div>`;
+  }
+  function renderInsights() {
+    const box = $("#insights");
+    if (box.hidden) return;
+    const open = boardTickets.filter(t => t.status !== "Resolved");
+    const count = key => open.reduce((m, t) => { const k = key(t); m[k] = (m[k] || 0) + 1; return m; }, {});
+    const reports = boardTickets.reduce((n, t) => n + t.reports.length, 0);
+    const dupShare = reports ? Math.round(((reports - boardTickets.length) / reports) * 100) : 0;
+    const resolved = boardTickets.length - open.length;
+    box.innerHTML =
+      bars("Open tickets by department", count(t => t.department), deptShort) +
+      bars("Open tickets by problem type", count(t => t.category), catLabel) +
+      `<div>${bars("Complaint languages", count(t => t.language || "English"), x => x)}
+        <p class="ins-foot">${reports} citizen reports → ${boardTickets.length} tickets · ${dupShare}% were duplicates merged · ${resolved} resolved</p></div>`;
+  }
+  $("#insightsBtn").addEventListener("click", () => {
+    const box = $("#insights");
+    box.hidden = !box.hidden;
+    $("#insightsBtn").setAttribute("aria-expanded", String(!box.hidden));
+    $("#insightsBtn").textContent = box.hidden ? "Insights" : "Hide insights";
+    renderInsights();
+  });
+
+  // ---------- keyboard shortcuts ----------
+  document.addEventListener("keydown", e => {
+    if (!session || $("#detailDlg").open) return;
+    const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+    if (e.key === "/" && !typing) { e.preventDefault(); $("#fSearch").focus(); }
+    else if ((e.key === "r" || e.key === "R") && !typing && !e.ctrlKey && !e.metaKey) { e.preventDefault(); loadBoard(); }
+    else if (e.key === "Escape" && document.activeElement === $("#fSearch")) { $("#fSearch").value = ""; $("#fSearch").blur(); renderBoard(); }
+  });
 
   function filtered() {
     const d = $("#fDept").value, s = $("#fSev").value, st = $("#fStatus").value, q = $("#fSearch").value.toLowerCase();
@@ -112,7 +186,7 @@
       : "<p>No tickets for your department right now.</p>";
     $("#ticketRows").innerHTML = rows.map(({ t, score }, i) => {
       const sla = P.slaInfo(t, now);
-      return `<tr class="${sevClass(t.severity)} ${t.status === "Resolved" ? "is-done" : ""}" data-id="${t.id}" tabindex="0">
+      return `<tr class="${sevClass(t.severity)} ${t.status === "Resolved" ? "is-done" : ""} ${newIds.has(t.id) ? "is-new" : ""}" data-id="${t.id}" tabindex="0">
         <td class="rank"><span>${t.status === "Resolved" ? "–" : i + 1}</span><small title="Priority score">${score < 0 ? "" : score}</small></td>
         <td><span class="sev-tag ${sevClass(t.severity)}">${t.severity}</span></td>
         <td class="tid">${t.id}${t.photo ? ' <span class="has-photo" title="Has photo">◩</span>' : ""}</td>
@@ -124,6 +198,8 @@
         <td class="${sla.breached ? "overdue" : ""}">${t.status === "Resolved" ? "Done" : fmtLeft(sla.hoursLeft)}</td>
         <td>${statusSelect(t)}</td></tr>`;
     }).join("");
+    newIds.clear();
+    renderInsights();
   }
 
   async function changeStatus(sel) {

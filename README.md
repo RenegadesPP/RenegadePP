@@ -33,6 +33,10 @@ Also:
 - **Duplicate detection**, even across languages, with the citizen's consent before merging. More reports → higher priority for officers.
 - **Reply to the citizen in their own language** with their ticket number.
 - **Photo check.** The AI describes the photo and flags it if it contradicts the text.
+- **Live alerts for officers.** New complaints and new duplicate reports pop up as notifications, and new rows flash on the dashboard.
+- **Insights.** Open tickets by department, problem type and language, plus the share of reports merged as duplicates.
+- **Keyboard shortcuts** on the officer dashboard: `/` search, `R` refresh.
+- **Citizen conveniences.** Draft autosave, a landmark tip, Copy number and Share on WhatsApp on the receipt.
 - **Never stops.** If the server or AI is unreachable, an on-device multilingual rule engine triages the complaint.
 
 ## Architecture
