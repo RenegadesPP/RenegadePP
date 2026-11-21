@@ -146,7 +146,10 @@
     st.textContent = "Finding you… allow location if the browser asks";
     const ok = p => {
       geo = { lat: +p.coords.latitude.toFixed(5), lng: +p.coords.longitude.toFixed(5), acc: Math.round(p.coords.accuracy) };
-      st.innerHTML = `Location added: ${geo.lat}, ${geo.lng} <small>(±${geo.acc} m)</small> · <a href="https://maps.google.com/?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener">view on map</a>`;
+      const rough = geo.acc > 500;
+      st.innerHTML = `Location added: ${geo.lat}, ${geo.lng} <small>(±${geo.acc >= 1000 ? (geo.acc / 1000).toFixed(1) + " km" : geo.acc + " m"})</small> · <a href="https://maps.google.com/?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener">view on map</a> · <button type="button" class="btn link" id="geoClear">remove</button>` +
+        (rough ? `<br><small>This is a rough estimate from the network, not GPS. Check it on the map, or remove it and type a landmark instead.</small>` : "");
+      $("#geoClear").onclick = () => { geo = null; st.textContent = "Location removed."; };
     };
     const fail = e => {
       const why = {
@@ -281,7 +284,7 @@
           <div><dt>Category</dt><dd>${esc(catLabel(t.category))}</dd></div>
           <div><dt>Routed to</dt><dd>${esc(deptName(t.department))}</dd></div>
           <div><dt>Why ${t.severity.toLowerCase()}</dt><dd>${esc(t.severityReason)}</dd></div>
-          <div><dt>Location</dt><dd>${esc(t.location || "Not given")}${t.geo ? ` <small>(<a href="https://maps.google.com/?q=${t.geo.lat},${t.geo.lng}" target="_blank" rel="noopener">GPS ${t.geo.lat}, ${t.geo.lng}</a>)</small>` : ""}</dd></div>
+          <div><dt>Location</dt><dd>${esc(t.location || "Not given")}${t.geo ? ` <small>(<a href="https://maps.google.com/?q=${t.geo.lat},${t.geo.lng}" target="_blank" rel="noopener">${t.geo.acc > 500 ? "approx. " : ""}GPS ${t.geo.lat}, ${t.geo.lng}</a>)</small>` : ""}</dd></div>
           <div><dt>Act within</dt><dd>${fmtLeft(sla.hoursLeft)}</dd></div>
           <div><dt>Language</dt><dd>${esc(t.language)}</dd></div>
         </dl>
