@@ -141,13 +141,23 @@
 
   $("#geoBtn").addEventListener("click", () => {
     const st = $("#geoStatus");
-    if (!navigator.geolocation) { st.textContent = "Location not available in this browser"; return; }
-    st.textContent = "Finding you…";
-    navigator.geolocation.getCurrentPosition(
-      p => { geo = { lat: +p.coords.latitude.toFixed(5), lng: +p.coords.longitude.toFixed(5) }; st.textContent = `GPS ${geo.lat}, ${geo.lng}`; },
-      e => { st.textContent = `Location blocked (${e.message || "permission denied"})`; },
-      { timeout: 8000 }
-    );
+    if (!navigator.geolocation) { st.textContent = "This browser can't share location. Type a landmark in the complaint instead."; return; }
+    if (!window.isSecureContext) { st.textContent = "Location needs the https:// link (GitHub Pages) or localhost."; return; }
+    st.textContent = "Finding you… allow location if the browser asks";
+    const ok = p => {
+      geo = { lat: +p.coords.latitude.toFixed(5), lng: +p.coords.longitude.toFixed(5), acc: Math.round(p.coords.accuracy) };
+      st.innerHTML = `Location added: ${geo.lat}, ${geo.lng} <small>(±${geo.acc} m)</small> · <a href="https://maps.google.com/?q=${geo.lat},${geo.lng}" target="_blank" rel="noopener">view on map</a>`;
+    };
+    const fail = e => {
+      const why = {
+        1: "Location permission is blocked. Click the location icon in the address bar → Allow, then try again.",
+        2: "Your computer couldn't find its position. On Windows: Settings → Privacy & security → Location → turn on Location services.",
+        3: "Location took too long. Try again, or type a landmark in the complaint.",
+      }[e.code] || `Location error: ${e.message}`;
+      st.textContent = why;
+    };
+    // Fast low-accuracy fix first (Wi-Fi), which works on laptops.
+    navigator.geolocation.getCurrentPosition(ok, fail, { enableHighAccuracy: false, timeout: 20000, maximumAge: 600000 });
   });
 
   // ---------- triage ----------
@@ -230,6 +240,7 @@
       await sleep(200);
       $("#steps").hidden = true;
       $("#ticketOut").innerHTML = ticketSlip(out);
+      if (window.innerWidth < 900) $("#ticketOut").scrollIntoView({ behavior: "smooth", block: "start" });
       $("#complaintText").value = ""; clearPhoto(); geo = null; $("#geoStatus").textContent = "";
     } catch (err) {
       $("#steps").hidden = true;
@@ -270,7 +281,7 @@
           <div><dt>Category</dt><dd>${esc(catLabel(t.category))}</dd></div>
           <div><dt>Routed to</dt><dd>${esc(deptName(t.department))}</dd></div>
           <div><dt>Why ${t.severity.toLowerCase()}</dt><dd>${esc(t.severityReason)}</dd></div>
-          <div><dt>Location</dt><dd>${esc(t.location || "Not given")}${t.geo ? ` <small>(GPS ${t.geo.lat}, ${t.geo.lng})</small>` : ""}</dd></div>
+          <div><dt>Location</dt><dd>${esc(t.location || "Not given")}${t.geo ? ` <small>(<a href="https://maps.google.com/?q=${t.geo.lat},${t.geo.lng}" target="_blank" rel="noopener">GPS ${t.geo.lat}, ${t.geo.lng}</a>)</small>` : ""}</dd></div>
           <div><dt>Act within</dt><dd>${fmtLeft(sla.hoursLeft)}</dd></div>
           <div><dt>Language</dt><dd>${esc(t.language)}</dd></div>
         </dl>
