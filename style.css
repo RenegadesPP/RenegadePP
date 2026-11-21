@@ -226,3 +226,36 @@ select.status { width: auto; padding: 5px 8px; font-size: 13px; }
 .detail-photo { max-width: 100%; max-height: 320px; border-radius: var(--radius-sm); }
 @media (max-width: 900px) { .tabs { overflow-x: auto; } .tab { white-space: nowrap; } .sync { margin-left: 0; } }
 .geo-status .btn.link { font-size: inherit; padding: 0; font-weight: 400; }
+
+/* ---------- v3: separate portals, citizen receipts, duplicate choice ---------- */
+.top-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.user-box { font-size: 14px; color: #fff; }
+.btn.link.light { color: #fff; padding: 0 2px; }
+.portal-tag { font-size: 12px; font-weight: 600; font-stretch: 100%; background: var(--kerb); color: var(--ink); border-radius: 4px; padding: 2px 7px; vertical-align: 4px; margin-left: 6px; letter-spacing: 0; }
+.foot { text-align: center; padding: 10px 0 40px; font-size: 14px; }
+.foot a { color: var(--signal); }
+.receipt, .choice { border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 18px 22px 20px; background: #fff; animation: slip-in 0.35s ease-out; border-top: 6px solid var(--signal); }
+.choice { border-top-color: var(--kerb); }
+.choice h2 { font-family: var(--font-display); font-stretch: 85%; font-size: 24px; margin: 0 0 12px; }
+.match { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; background: #f7f9f6; }
+.match-title { font-weight: 600; margin: 8px 0 2px; }
+.choice-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.choice-actions .btn { width: 100%; padding: 12px; }
+.status-tag.st-received { background: #e6eef9; color: var(--signal-2); }
+.status-tag.st-underreview { background: #efe8f7; color: #4e2a7f; }
+.status-tag.st-assignedtoateam { background: #fdf1d8; color: #6b4b00; }
+.status-tag.st-workstarted { background: #ffe7d6; color: #8a3a00; }
+.status-tag.st-resolved { background: #e2f1e8; color: var(--low); }
+.timeline { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.timeline li { font-size: 12px; color: var(--ink-2); border-top: 4px solid var(--line); padding-top: 6px; }
+.timeline li.done { border-top-color: var(--signal); color: var(--ink); }
+.timeline li.current { font-weight: 700; }
+.timeline time { display: block; font-size: 11px; color: var(--ink-2); font-weight: 400; }
+#myList .track-card:first-child { margin-top: 0; }
+@media (max-width: 900px) {
+  .top-right { gap: 8px; }
+  .user-box { font-size: 12px; }
+  .timeline { grid-template-columns: 1fr; }
+  .timeline li { border-top: 0; border-left: 4px solid var(--line); padding: 2px 0 2px 8px; }
+  .timeline li.done { border-left-color: var(--signal); }
+}

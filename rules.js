@@ -154,7 +154,7 @@
       severity,
       severity_reason,
       hazards,
-      location_text: (clean.match(/\b(?:near|outside|opposite|beside|behind|in front of|in)\s+(?:the\s+)?([A-Z0-9][^,.!?]{2,45})/) || [])[1]?.trim() || "",
+      location_text: ((clean.match(/\b(?:near|outside|opposite|beside|behind|in front of|in)\s+(?:the\s+)?([A-Z0-9][^,.!?]{2,45})/) || [])[1] || "").trim(),
       missing_info: hasLocation ? "" : "Exact location or nearby landmark",
       photo_observation: "",
       photo_matches_text: true,

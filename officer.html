@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CivicLens — Officer portal</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2714%27 cy=%2714%27 r=%279%27 fill=%27none%27 stroke=%27%23f2b33d%27 stroke-width=%274%27/%3E%3Cpath d=%27M21 21l7 7%27 stroke=%27%23f2b33d%27 stroke-width=%274%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..100,500..800&family=Noto+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Kannada:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="officer">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-name">CivicLens <span class="portal-tag">Officer portal</span></div>
+        <div class="brand-city" id="cityLabel">City Municipal Corporation</div>
+      </div>
+    </div>
+    <div class="top-right">
+      <span class="user-box" id="officerBox" hidden><span id="officerName"></span> · <button class="btn link light" id="logoutBtn">Log out</button></span>
+      <span class="engine-pill" id="enginePill">Connecting…</span>
+    </div>
+  </header>
+
+  <!-- ============ OFFICER LOGIN ============ -->
+  <main id="view-login" class="view" hidden>
+    <section class="panel narrow">
+      <h1 class="h-display small">Officer login</h1>
+      <p class="lede">For municipal staff only. Each department officer sees their own department's tickets; the commissioner sees all.</p>
+      <form id="loginForm" autocomplete="on">
+        <label class="field-label" for="loginUser">Username</label>
+        <input type="text" id="loginUser" autocomplete="username" autocapitalize="none">
+        <label class="field-label" for="loginPass">Password</label>
+        <input type="password" id="loginPass" autocomplete="current-password">
+        <button class="btn primary big" type="submit" id="loginBtn">Log in</button>
+        <p class="form-error" id="loginError" role="alert"></p>
+      </form>
+    </section>
+  </main>
+
+  <!-- ============ OFFICER VIEW ============ -->
+  <main id="view-dashboard" class="view wide-view" hidden>
+    <section class="kpis" id="kpis"></section>
+    <section class="panel board">
+      <div class="board-head">
+        <div>
+          <h1 class="h-display small">Tickets by priority</h1>
+          <div class="who" id="whoAmI"></div>
+        </div>
+        <div class="filters">
+          <select id="fDept" aria-label="Department"><option value="">All departments</option></select>
+          <select id="fSev" aria-label="Severity"><option value="">All severities</option></select>
+          <select id="fStatus" aria-label="Status"></select>
+          <input type="search" id="fSearch" placeholder="Search tickets" aria-label="Search tickets">
+        </div>
+        <div class="board-actions">
+          <button class="btn ghost" id="refreshBtn">Refresh</button>
+          <button class="btn ghost admin-only" id="batchBtn">Load demo complaints</button>
+          <button class="btn ghost" id="csvBtn">Export CSV</button>
+          <button class="btn link danger admin-only" id="resetBtn">Clear all tickets</button>
+          <span class="sync" id="syncNote"></span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="tickets">
+          <thead>
+            <tr><th>#</th><th>Severity</th><th>Ticket</th><th>Issue</th><th>Department</th><th>Reports</th><th>Internal deadline</th><th>Status</th></tr>
+          </thead>
+          <tbody id="ticketRows"></tbody>
+        </table>
+        <div class="board-empty" id="boardEmpty" hidden>
+          <p>No tickets yet. File a complaint, or press <strong>Triage all samples</strong> to load the demo set.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Ticket detail -->
+  <dialog id="detailDlg" class="dlg wide">
+    <div id="detailBody"></div>
+    <form method="dialog" class="dlg-actions"><button class="btn ghost">Close</button></form>
+  </dialog>
+
+  <footer class="foot"><a href="index.html">Citizen portal</a></footer>
+
+  <script src="server-url.js"></script>
+  <script src="config.js"></script>
+  <script src="rules.js"></script>
+  <script src="pipeline.js"></script>
+  <script src="samples.js"></script>
+  <script src="common.js"></script>
+  <script src="officer.js"></script>
+</body>
+</html>

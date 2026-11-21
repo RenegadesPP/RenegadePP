@@ -4,7 +4,8 @@ CivicLens turns a messy citizen complaint (text or voice in English, Telugu, Hin
 
 Built during the *Prompt to Product* hackathon (21 Nov 2026, 10:30 AM–2:30 PM).
 
-**Live demo:** https://renegadespp.github.io/RenegadePP/
+**Citizen portal:** https://renegadespp.github.io/RenegadePP/
+**Officer portal:** https://renegadespp.github.io/RenegadePP/officer.html
 
 ## Features
 
@@ -14,14 +15,22 @@ Built during the *Prompt to Product* hackathon (21 Nov 2026, 10:30 AM–2:30 PM)
 | 2. Classify the issue | Gemini picks one of 11 categories from a fixed list (JSON schema with enums) |
 | 3. Severity Low / Medium / High / Critical with a one-line reason | Gemini rates severity against a written rubric; a **safety guardrail** then enforces minimums (e.g. any live wire → Critical) |
 | 4. Route to the correct department | Category → department routing table in `config.js`. Live-wire hazards go to the power DISCOM, not the streetlight wing |
-| 5. Dashboard sorted by priority | Officer dashboard (login required) with priority score, deadlines, filters, status updates, CSV export |
+| 5. Dashboard sorted by priority | Officer portal (separate page, login required) with priority score, internal deadlines, duplicate groups, filters, status updates, CSV export |
+
+### Two separate portals
+- **Citizen portal (`index.html`)** — sign in with name + mobile number, report a problem, follow "My complaints". Citizens **never see** severity, priority, risk flags or deadlines, and are never promised a completion date. They see plain statuses: **Received → Under review → Assigned to a team → Work started → Resolved**.
+- **Officer portal (`officer.html`)** — officer login, full priority, severity reason, suggested department, safety-guardrail notes, duplicate groups with every citizen report (and contact details), status control. **Only an officer's explicit status change can mark a ticket Resolved.**
+
+### Similar complaints
+If a new complaint matches an open one, the citizen sees a short summary of the existing complaint (problem, public location, status, number of reports — never another citizen's name or number) and chooses **Add my report** (text, photo and location are attached to the existing group and its report count goes up; status is unchanged) or **File separately**.
 
 Also:
 - **No setup for citizens.** The Gemini key lives on the server, never in the website.
+- **Citizen sign-in** with name + mobile number (not OTP-verified in this prototype).
 - **Officer logins per department.** The commissioner sees everything; a Roads officer sees only Roads tickets and can only update those.
 - **Shared database.** A complaint filed on any phone appears on every officer's dashboard (auto-refresh every 20 s).
-- **Track my complaint.** Citizens check status by ticket number; complaints filed from their phone are listed automatically.
-- **Duplicate merging**, even across languages. More reports → higher priority.
+- **My complaints.** Citizens see every complaint they filed or joined, with a status timeline; any complaint number can also be checked.
+- **Duplicate detection**, even across languages, with the citizen's consent before merging. More reports → higher priority for officers.
 - **Reply to the citizen in their own language** with their ticket number.
 - **Photo check.** The AI describes the photo and flags it if it contradicts the text.
 - **Never stops.** If the server or AI is unreachable, an on-device multilingual rule engine triages the complaint.
@@ -64,8 +73,9 @@ After changing `backend-Code.gs`, use **Deploy → Manage deployments → Edit �
 
 | File | Purpose |
 |---|---|
-| `index.html`, `style.css` | Pages: report, track, officer login, dashboard |
-| `app.js` | Website logic: location, photo, voice, server calls, dashboard |
+| `index.html` + `citizen.js` | Citizen portal: sign-in, report, similar-complaint choice, my complaints |
+| `officer.html` + `officer.js` | Officer portal: login, priority dashboard, ticket detail, status updates |
+| `common.js`, `style.css` | Shared server calls, helpers and styles |
 | `server-url.js` | Address of the Apps Script backend |
 | `config.js` | Categories, departments, routing table, severity points and deadlines |
 | `prompt.js` | The system prompt, worked examples and JSON schema sent to Gemini |
@@ -77,6 +87,8 @@ After changing `backend-Code.gs`, use **Deploy → Manage deployments → Edit �
 ## Limitations
 - Apps Script and Google Sheets suit a pilot of a few thousand tickets; a city-wide rollout needs a proper database and server.
 - Officer accounts are managed by editing the Officers sheet; there is no self-service password reset.
+- Citizen mobile numbers are not verified (no OTP) and citizens are not sent SMS or email updates; they check status in "My complaints".
+- There is no automatic "suggested next steps" for officers; the closest is "Information still needed" from the AI.
 - Laptop locations come from the network and can be kilometres off; phone GPS is accurate.
 - Severity rules and deadlines are our assumptions, not an official municipal policy.
 

@@ -49,6 +49,8 @@ You will receive a list of OPEN tickets. If this complaint describes the SAME ph
 - citizen_reply: 1–2 short, polite sentences IN THE CITIZEN'S OWN LANGUAGE AND SCRIPT confirming the complaint, naming the department in that language, and including the literal token {TICKET_ID}. If missing_info is not empty, also ask for it.
 - confidence: 0 to 1, how sure you are about category and severity.
 - Never invent facts that are not in the text or photo.
+- Privacy: never put a person's name, phone number, email, house number or vehicle number in english_summary or location_text. Describe the problem and the public place only (street, landmark, area).
+- citizen_reply must NOT mention severity, priority, risk level, or any promised time to fix the problem.
 
 ## Examples
 Complaint: "Current wire fell on the road near Govt school Ramnagar, sparks coming"

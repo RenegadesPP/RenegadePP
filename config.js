@@ -61,9 +61,21 @@
     { code: "ta-IN", label: "தமிழ் Tamil" },
   ];
 
+  // Ticket status — the same words are shown to officers and citizens. Only an officer can set "Resolved".
+  const STATUSES = ["Received", "Under review", "Assigned to a team", "Work started", "Resolved"];
+  const STATUS_HELP = {
+    "Received": "Your complaint has been received.",
+    "Under review": "The municipal team is reviewing it.",
+    "Assigned to a team": "A field team has been assigned.",
+    "Work started": "Work on the problem has started.",
+    "Resolved": "The municipal team has marked this as resolved.",
+  };
+  // Older tickets used these names.
+  const LEGACY_STATUS = { "Open": "Received", "In progress": "Work started" };
+
   const MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-2.5-flash"];
 
-  const CONFIG = { CATEGORIES, DEPARTMENTS, SEVERITIES, SEVERITY_META, HAZARDS, LANGUAGES, MODELS };
+  const CONFIG = { CATEGORIES, DEPARTMENTS, SEVERITIES, SEVERITY_META, HAZARDS, LANGUAGES, MODELS, STATUSES, STATUS_HELP, LEGACY_STATUS };
   root.CL_CONFIG = CONFIG;
   if (typeof module !== "undefined") module.exports = CONFIG;
 })(typeof window !== "undefined" ? window : globalThis);

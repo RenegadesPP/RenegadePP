@@ -1,4 +1,4 @@
-/* CivicLens backend — paste this whole file into Apps Script (Code.gs). Generated 2026-11-21 11:53 IST. */
+/* CivicLens backend — paste this whole file into Apps Script (Code.gs). Generated 2026-11-21 12:53 IST. */
 
 /* ======== js/config.js ======== */
 /* CivicLens — configuration.
@@ -64,9 +64,21 @@
     { code: "ta-IN", label: "தமிழ் Tamil" },
   ];
 
+  // Ticket status — the same words are shown to officers and citizens. Only an officer can set "Resolved".
+  const STATUSES = ["Received", "Under review", "Assigned to a team", "Work started", "Resolved"];
+  const STATUS_HELP = {
+    "Received": "Your complaint has been received.",
+    "Under review": "The municipal team is reviewing it.",
+    "Assigned to a team": "A field team has been assigned.",
+    "Work started": "Work on the problem has started.",
+    "Resolved": "The municipal team has marked this as resolved.",
+  };
+  // Older tickets used these names.
+  const LEGACY_STATUS = { "Open": "Received", "In progress": "Work started" };
+
   const MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-2.5-flash"];
 
-  const CONFIG = { CATEGORIES, DEPARTMENTS, SEVERITIES, SEVERITY_META, HAZARDS, LANGUAGES, MODELS };
+  const CONFIG = { CATEGORIES, DEPARTMENTS, SEVERITIES, SEVERITY_META, HAZARDS, LANGUAGES, MODELS, STATUSES, STATUS_HELP, LEGACY_STATUS };
   root.CL_CONFIG = CONFIG;
   if (typeof module !== "undefined") module.exports = CONFIG;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -123,6 +135,8 @@ You will receive a list of OPEN tickets. If this complaint describes the SAME ph
 - citizen_reply: 1–2 short, polite sentences IN THE CITIZEN'S OWN LANGUAGE AND SCRIPT confirming the complaint, naming the department in that language, and including the literal token {TICKET_ID}. If missing_info is not empty, also ask for it.
 - confidence: 0 to 1, how sure you are about category and severity.
 - Never invent facts that are not in the text or photo.
+- Privacy: never put a person's name, phone number, email, house number or vehicle number in english_summary or location_text. Describe the problem and the public place only (street, landmark, area).
+- citizen_reply must NOT mention severity, priority, risk level, or any promised time to fix the problem.
 
 ## Examples
 Complaint: "Current wire fell on the road near Govt school Ramnagar, sparks coming"
@@ -330,7 +344,7 @@ NEW COMPLAINT${hasPhoto ? " (photo attached)" : ""}:
       severity,
       severity_reason,
       hazards,
-      location_text: (clean.match(/\b(?:near|outside|opposite|beside|behind|in front of|in)\s+(?:the\s+)?([A-Z0-9][^,.!?]{2,45})/) || [])[1]?.trim() || "",
+      location_text: ((clean.match(/\b(?:near|outside|opposite|beside|behind|in front of|in)\s+(?:the\s+)?([A-Z0-9][^,.!?]{2,45})/) || [])[1] || "").trim(),
       missing_info: hasLocation ? "" : "Exact location or nearby landmark",
       photo_observation: "",
       photo_matches_text: true,
@@ -492,7 +506,7 @@ var SERVER_MODELS = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-2.5-fl
 var TICKET_HEADERS = ["id", "created", "updated", "status", "severity", "category", "department", "summary",
   "location", "address", "reports", "language", "engine", "ticket_json", "photo"];
 var OFFICER_HEADERS = ["username", "name", "department", "password_hash", "set_new_password"];
-var STATUSES = ["Open", "In progress", "Resolved"];
+var PHOTO_HEADERS = ["ticket_id", "report_at", "photo"];
 
 // Demo officer accounts created by setup(). Change passwords in the Officers sheet (column E).
 var DEFAULT_OFFICERS = [
@@ -534,7 +548,10 @@ var HANDLERS = {
   ping: function () { return { city: CITY_NAME, ai: !!getKey_() }; },
   geocode: function (req) { return { address: reverseGeocode_(req.lat, req.lng) }; },
   triage: triage_,
+  confirm: confirm_,
   track: track_,
+  citizenLogin: citizenLogin_,
+  mine: mine_,
   login: login_,
   logout: function (req) { CacheService.getScriptCache().remove("s_" + req.token); return {}; },
   list: list_,
@@ -549,6 +566,7 @@ function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   PropertiesService.getScriptProperties().setProperty("SPREADSHEET_ID", ss.getId());
   sheet_("Tickets", TICKET_HEADERS);
+  sheet_("Photos", PHOTO_HEADERS);
   var off = sheet_("Officers", OFFICER_HEADERS);
   if (off.getLastRow() < 2) {
     var rows = DEFAULT_OFFICERS.map(function (o) { return [o[0], o[1], o[2], hash_(o[0], o[3]), ""]; });
@@ -566,16 +584,20 @@ function testGemini() {
 
 /* ---------------- triage ---------------- */
 
+// Step 1. Classify the complaint. If it matches an open ticket, the citizen is asked first
+// (the analysed complaint waits in the cache for 15 minutes); otherwise it is saved at once.
+// Officers' demo loader sends autoMerge:true to skip the question.
 function triage_(req) {
-  var C = globalThis.CL_CONFIG, R = globalThis.CL_RULES, PIPE = globalThis.CL_PIPE;
+  var R = globalThis.CL_RULES, PIPE = globalThis.CL_PIPE;
   var text = String(req.text || "").slice(0, 3000);
   var photo = req.photo && req.photo.base64 ? req.photo : null;
   var thumb = typeof req.thumb === "string" && req.thumb.length < 45000 ? req.thumb : "";
   var geo = cleanGeo_(req.geo);
   var address = String(req.address || "").slice(0, 200);
+  var citizen = req.citizenToken ? citizenSession_(req.citizenToken) : null;
   if (!text && !photo) throw new Error("Describe the problem or add a photo.");
 
-  // 1. Ask Gemini (outside the lock — it is the slow part).
+  // Ask Gemini (outside the lock — it is the slow part).
   var before = readTickets_().filter(function (t) { return t.status !== "Resolved"; }).slice(-25)
     .map(function (t) { return { id: t.id, category: t.category, summary: t.summary, location: t.location }; });
   var raw, engine, aiError = null;
@@ -590,43 +612,98 @@ function triage_(req) {
   f.aiError = aiError;
   if (!f.location && address) f.location = "Near " + address;
 
-  // 2. Duplicate check + save, under a lock so two citizens can't collide.
+  var pending = { f: f, text: text, thumb: thumb, geo: geo, address: address, citizen: citizen };
+  var dup = PIPE.findDuplicate(f, text, geo, readTickets_());
+  if (dup && !req.autoMerge) {
+    var pid = Utilities.getUuid();
+    CacheService.getScriptCache().put("p_" + pid, JSON.stringify(pending), 900);
+    return { needsChoice: true, pendingId: pid, match: matchSummary_(dup.ticket) };
+  }
+  return save_(pending, dup ? "merge" : "new", dup ? dup.ticket.id : null, dup ? dup.method : null);
+}
+
+// Step 2. The citizen chose to add to the existing ticket ("merge") or file separately ("separate").
+function confirm_(req) {
+  var cache = CacheService.getScriptCache();
+  var raw = cache.get("p_" + req.pendingId);
+  if (!raw) throw new Error("This complaint expired — please submit it again.");
+  var pending = JSON.parse(raw);
+  var res;
+  if (req.choice === "merge") {
+    var hit = globalThis.CL_PIPE.findDuplicate(pending.f, pending.text, pending.geo, readTickets_());
+    res = hit ? save_(pending, "merge", hit.ticket.id, "Citizen confirmed (" + hit.method + ")")
+              : save_(pending, "new", null, null);   // the old ticket was resolved meanwhile
+  } else {
+    res = save_(pending, "new", null, null);
+  }
+  cache.remove("p_" + req.pendingId);
+  return res;
+}
+
+function save_(p, mode, targetId, method) {
+  var C = globalThis.CL_CONFIG, R = globalThis.CL_RULES;
+  var f = p.f;
   var lock = LockService.getScriptLock();
   lock.waitLock(25000);
   try {
-    var tickets = readTickets_();
     var now = Date.now();
-    var report = { at: now, text: text, language: f.language, address: address };
-    var dup = PIPE.findDuplicate(f, text, geo, tickets);
-    if (dup) {
-      var t = dup.ticket;
+    var report = { at: now, text: p.text, language: f.language, address: p.address,
+      citizen: p.citizen ? { name: p.citizen.name, phone: p.citizen.phone } : null, hasPhoto: !!p.thumb };
+    var t = mode === "merge" ? readTickets_().filter(function (x) { return x.id === targetId; })[0] : null;
+    if (t) {
+      // Add the report to the group. The status is NOT changed — only an officer can resolve.
       t.reports.push(report);
       var sevBefore = t.severity;
       t.severity = R.maxSev(t.severity, f.severity);
       if (t.severity !== sevBefore) t.severityReason = f.severityReason;
       t.hazards = Array.from(new Set(t.hazards.concat(f.hazards)));
-      if (!t.photo && thumb) t.photo = thumb;
+      if (!t.photo && p.thumb) t.photo = p.thumb;
       if (!t.location && f.location) t.location = f.location;
+      if (!t.geo && p.geo) t.geo = p.geo;
       t.updatedAt = now;
-      t.log.push({ at: now, what: "Duplicate report merged (" + dup.method + ")" });
+      t.log.push({ at: now, what: "Report " + t.reports.length + " added to this group (" + method + ")" });
       writeTicket_(t);
-      var reply = fill_(f.citizenReplyTemplate, t.id, C.DEPARTMENTS[t.department].short);
-      return { ticket: public_(t), merged: dup.method, fields: publicFields_(f), reply: reply };
+      if (p.thumb) savePhoto_(t.id, now, p.thumb);
+      return { ticket: citizenView_(t), merged: true, reply: fill_(f.citizenReplyTemplate, t.id, C.DEPARTMENTS[t.department].short) };
     }
     var id = nextId_();
     var nt = {};
     Object.keys(f).forEach(function (k) { nt[k] = f[k]; });
-    nt.id = id; nt.createdAt = now; nt.updatedAt = now; nt.status = "Open";
+    nt.id = id; nt.createdAt = now; nt.updatedAt = now; nt.status = "Received";
     nt.citizenReply = fill_(f.citizenReplyTemplate, id, C.DEPARTMENTS[f.department].short);
-    nt.geo = geo; nt.address = address; nt.photo = thumb || null;
+    nt.geo = p.geo; nt.address = p.address; nt.photo = p.thumb || null;
     nt.reports = [report];
-    nt.log = [{ at: now, what: "Created by " + engine }];
+    nt.log = [{ at: now, what: "Created by " + f.engine }];
     delete nt.citizenReplyTemplate; delete nt.duplicateHint;
     writeTicket_(nt);
-    return { ticket: public_(nt), merged: null, fields: publicFields_(f), reply: nt.citizenReply };
+    if (p.thumb) savePhoto_(id, now, p.thumb);
+    return { ticket: citizenView_(nt), merged: false, reply: nt.citizenReply };
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ---------------- citizen-safe views (no priority, no deadlines, no other citizens' data) ---------------- */
+
+function matchSummary_(t) {
+  var C = globalThis.CL_CONFIG;
+  return { id: t.id, category: C.CATEGORIES[t.category].label, summary: t.summary, location: t.location || "",
+    status: t.status, reports: t.reports.length, firstReported: t.createdAt };
+}
+
+function citizenView_(t) {
+  var C = globalThis.CL_CONFIG;
+  var history = [{ at: t.createdAt, what: "Received" }];
+  (t.log || []).forEach(function (l) {
+    var m = /^Status → (.+?) by /.exec(l.what);
+    if (m) history.push({ at: l.at, what: m[1] });
+  });
+  return {
+    id: t.id, status: t.status, statusHelp: C.STATUS_HELP[t.status] || "",
+    category: C.CATEGORIES[t.category].label, department: C.DEPARTMENTS[t.department].short,
+    summary: t.summary, location: t.location || "", missingInfo: t.missingInfo || "",
+    createdAt: t.createdAt, updatedAt: t.updatedAt, reports: t.reports.length, history: history,
+  };
 }
 
 function track_(req) {
@@ -634,11 +711,35 @@ function track_(req) {
   if (!/^CL-\d+$/.test(id)) throw new Error("Ticket numbers look like CL-1001.");
   var t = readTickets_().filter(function (x) { return x.id === id; })[0];
   if (!t) throw new Error("No ticket " + id + " found.");
-  return { ticket: {
-    id: t.id, status: t.status, severity: t.severity, category: t.category, department: t.department,
-    summary: t.summary, location: t.location, createdAt: t.createdAt, updatedAt: t.updatedAt,
-    reports: t.reports.length, log: t.log,
-  } };
+  return { ticket: citizenView_(t) };
+}
+
+/* ---------------- citizens ---------------- */
+// Name + mobile number identify a citizen. NOT verified by OTP in this prototype.
+
+function citizenLogin_(req) {
+  var name = String(req.name || "").trim().slice(0, 60);
+  var phone = String(req.phone || "").replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
+  if (!name) throw new Error("Please enter your name.");
+  if (!/^[6-9]\d{9}$/.test(phone)) throw new Error("Please enter a valid 10-digit mobile number.");
+  var token = Utilities.getUuid();
+  CacheService.getScriptCache().put("c_" + token, JSON.stringify({ name: name, phone: phone }), 21600);
+  return { token: token, name: name };
+}
+
+function citizenSession_(token) {
+  var s = token && CacheService.getScriptCache().get("c_" + token);
+  if (!s) throw new Error("CITIZEN_SESSION_EXPIRED");
+  return JSON.parse(s);
+}
+
+function mine_(req) {
+  var c = citizenSession_(req.citizenToken);
+  var mine = readTickets_().filter(function (t) {
+    return t.reports.some(function (r) { return r.citizen && r.citizen.phone === c.phone; });
+  });
+  mine.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+  return { tickets: mine.map(citizenView_) };
 }
 
 /* ---------------- officers ---------------- */
@@ -669,19 +770,29 @@ function canSee_(s, t) { return s.dept === "ALL" || s.dept === t.department; }
 
 function list_(req) {
   var s = session_(req.token);
-  var tickets = readTickets_().filter(function (t) { return canSee_(s, t); }).map(public_);
+  var photos = readPhotos_();
+  var tickets = readTickets_().filter(function (t) { return canSee_(s, t); }).map(function (t) {
+    var o = public_(t);
+    o.reports = t.reports.map(function (r) {
+      var c = {}; Object.keys(r).forEach(function (k) { c[k] = r[k]; });
+      c.photo = photos[t.id + "|" + r.at] || null;
+      return c;
+    });
+    return o;
+  });
   return { tickets: tickets, name: s.name, dept: s.dept, city: CITY_NAME };
 }
 
 function update_(req) {
   var s = session_(req.token);
-  if (STATUSES.indexOf(req.status) < 0) throw new Error("Unknown status");
+  if (globalThis.CL_CONFIG.STATUSES.indexOf(req.status) < 0) throw new Error("Unknown status");
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     var t = readTickets_().filter(function (x) { return x.id === req.id; })[0];
     if (!t) throw new Error("Ticket not found");
     if (!canSee_(s, t)) throw new Error("This ticket belongs to another department.");
+    if (t.status === req.status) return { ticket: public_(t) };
     t.status = req.status;
     t.updatedAt = Date.now();
     t.log.push({ at: t.updatedAt, what: "Status → " + t.status + " by " + s.name });
@@ -695,6 +806,8 @@ function reset_(req) {
   if (s.dept !== "ALL") throw new Error("Only the commissioner can clear tickets.");
   var sh = sheet_("Tickets", TICKET_HEADERS);
   if (sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
+  var ph = sheet_("Photos", PHOTO_HEADERS);
+  if (ph.getLastRow() > 1) ph.deleteRows(2, ph.getLastRow() - 1);
   PropertiesService.getScriptProperties().setProperty("SEQ", "1000");
   return {};
 }
@@ -844,6 +957,8 @@ function readTickets_() {
     try {
       var t = JSON.parse(js);
       t.status = vals[i][3] || t.status;      // officers may edit status directly in the sheet
+      t.status = globalThis.CL_CONFIG.LEGACY_STATUS[t.status] || t.status;
+      if (globalThis.CL_CONFIG.STATUSES.indexOf(t.status) < 0) t.status = "Received";
       t.photo = vals[i][14] || null;
       t._row = i + 1;
       out.push(t);
@@ -860,6 +975,17 @@ function writeTicket_(t) {
     t.summary, t.location || "", t.address || "", t.reports.length, t.language, t.engine, JSON.stringify(copy), t.photo || ""];
   if (t._row) sh.getRange(t._row, 1, 1, row.length).setValues([row]);
   else sh.appendRow(row);
+}
+
+function savePhoto_(id, at, thumb) {
+  sheet_("Photos", PHOTO_HEADERS).appendRow([id, at, thumb]);
+}
+
+function readPhotos_() {
+  var vals = sheet_("Photos", PHOTO_HEADERS).getDataRange().getValues();
+  var out = {};
+  for (var i = 1; i < vals.length; i++) out[vals[i][0] + "|" + vals[i][1]] = vals[i][2];
+  return out;
 }
 
 function nextId_() {

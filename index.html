@@ -19,16 +19,34 @@
         <div class="brand-city" id="cityLabel">City Municipal Corporation</div>
       </div>
     </div>
-    <nav class="tabs" role="tablist">
+    <nav class="tabs" role="tablist" hidden>
       <button class="tab is-active" role="tab" data-view="report" aria-selected="true">Report an issue</button>
-      <button class="tab" role="tab" data-view="track" aria-selected="false">Track my complaint</button>
-      <button class="tab" role="tab" data-view="dashboard" aria-selected="false">Officer login <span class="tab-count" id="openCount" hidden>0</span></button>
+      <button class="tab" role="tab" data-view="mine" aria-selected="false">My complaints</button>
     </nav>
-    <span class="engine-pill" id="enginePill">Connecting…</span>
+    <div class="top-right">
+      <span class="user-box" id="citizenBox" hidden><span id="citizenName"></span> · <button class="btn link light" id="signoutBtn">Sign out</button></span>
+      <span class="engine-pill" id="enginePill">Connecting…</span>
+    </div>
   </header>
 
+  <!-- ============ CITIZEN SIGN-IN ============ -->
+  <main id="view-signin" class="view" hidden>
+    <section class="panel narrow">
+      <h1 class="h-display">Report a civic problem</h1>
+      <p class="lede">Potholes, garbage, streetlights, water leaks, fallen trees, drains — tell your municipality in your own language.</p>
+      <form id="signinForm" autocomplete="on">
+        <label class="field-label" for="cName">Your name</label>
+        <input type="text" id="cName" autocomplete="name">
+        <label class="field-label" for="cPhone">Mobile number</label>
+        <input type="tel" id="cPhone" autocomplete="tel" inputmode="tel" placeholder="10-digit mobile number">
+        <p class="hint">Used to show you your own complaints. Never shown to other citizens. (This prototype does not verify the number by OTP.)</p>
+        <button class="btn primary big" type="submit" id="signinBtn">Continue</button>
+        <p class="form-error" id="signinError" role="alert"></p>
+      </form>
+    </section>
+  </main>
   <!-- ============ CITIZEN VIEW ============ -->
-  <main id="view-report" class="view">
+  <main id="view-report" class="view" hidden>
     <section class="report-grid">
       <form id="complaintForm" class="panel complaint" autocomplete="off">
         <h1 class="h-display">What needs fixing?</h1>
@@ -63,118 +81,55 @@
           </div>
         </div>
 
-        <button type="submit" class="btn primary big" id="submitBtn">Triage complaint</button>
+        <button type="submit" class="btn primary big" id="submitBtn">Send complaint</button>
         <p class="form-error" id="formError" role="alert"></p>
       </form>
 
       <section class="panel result" id="resultPanel" aria-live="polite">
         <div class="result-empty" id="resultEmpty">
-          <h2>Your ticket appears here</h2>
-          <p>CivicLens reads the complaint, decides the category and severity, checks it against safety rules, merges duplicates and routes it to the right department.</p>
+          <h2>What happens next</h2>
+          <p>CivicLens reads your complaint and photo, works out what kind of problem it is, checks whether someone has already reported it, and sends it to the right municipal team. You get a complaint number to follow its status.</p>
           <ol class="pipeline-legend">
             <li>Understand the complaint and photo</li>
-            <li>Classify and rate severity</li>
-            <li>Safety guardrail check</li>
-            <li>Duplicate check and routing</li>
+            <li>Identify the type of problem</li>
+            <li>Check for similar reports</li>
+            <li>Send to the right team</li>
           </ol>
         </div>
         <ol class="steps" id="steps" hidden>
           <li data-step="read">Reading complaint</li>
-          <li data-step="classify">Classifying and rating severity</li>
-          <li data-step="guard">Safety guardrail check</li>
-          <li data-step="route">Duplicate check and routing</li>
+          <li data-step="classify">Identifying the problem</li>
+          <li data-step="check">Checking for similar reports</li>
+          <li data-step="route">Sending to the right team</li>
         </ol>
         <div id="ticketOut"></div>
       </section>
     </section>
   </main>
 
-  <!-- ============ TRACK VIEW ============ -->
-  <main id="view-track" class="view" hidden>
+  <!-- ============ MY COMPLAINTS ============ -->
+  <main id="view-mine" class="view" hidden>
     <section class="panel narrow">
-      <h1 class="h-display small">Track my complaint</h1>
+      <h1 class="h-display small">My complaints</h1>
+      <div id="myList"></div>
+      <h2 class="sub">Check any complaint number</h2>
       <form id="trackForm" class="row">
-        <input type="text" id="trackId" placeholder="Ticket number, e.g. CL-1001" aria-label="Ticket number" style="flex:1">
+        <input type="text" id="trackId" placeholder="e.g. CL-1001" aria-label="Complaint number" style="flex:1">
         <button class="btn primary" type="submit">Check status</button>
       </form>
       <p class="form-error" id="trackError" role="alert"></p>
       <div id="trackOut"></div>
-      <h2 class="sub">Complaints from this phone</h2>
-      <ul class="mine" id="myList"></ul>
     </section>
   </main>
 
-  <!-- ============ OFFICER LOGIN ============ -->
-  <main id="view-login" class="view" hidden>
-    <section class="panel narrow">
-      <h1 class="h-display small">Officer login</h1>
-      <p class="lede">For municipal staff. Each department officer sees only their own department's tickets.</p>
-      <form id="loginForm" autocomplete="on">
-        <label class="field-label" for="loginUser">Username</label>
-        <input type="text" id="loginUser" autocomplete="username" autocapitalize="none">
-        <label class="field-label" for="loginPass">Password</label>
-        <input type="password" id="loginPass" autocomplete="current-password">
-        <button class="btn primary big" type="submit" id="loginBtn">Log in</button>
-        <p class="form-error" id="loginError" role="alert"></p>
-      </form>
-    </section>
-  </main>
-
-  <!-- ============ OFFICER VIEW ============ -->
-  <main id="view-dashboard" class="view" hidden>
-    <section class="kpis" id="kpis"></section>
-    <section class="panel board">
-      <div class="board-head">
-        <div>
-          <h1 class="h-display small">Tickets by priority</h1>
-          <div class="who" id="whoAmI"></div>
-        </div>
-        <div class="filters">
-          <select id="fDept" aria-label="Department"><option value="">All departments</option></select>
-          <select id="fSev" aria-label="Severity"><option value="">All severities</option></select>
-          <select id="fStatus" aria-label="Status">
-            <option value="active">Open + in progress</option>
-            <option value="">All statuses</option>
-            <option value="Open">Open</option>
-            <option value="In progress">In progress</option>
-            <option value="Resolved">Resolved</option>
-          </select>
-          <input type="search" id="fSearch" placeholder="Search tickets" aria-label="Search tickets">
-        </div>
-        <div class="board-actions">
-          <button class="btn ghost" id="refreshBtn">Refresh</button>
-          <button class="btn ghost admin-only" id="batchBtn">Load demo complaints</button>
-          <button class="btn ghost" id="csvBtn">Export CSV</button>
-          <button class="btn link danger admin-only" id="resetBtn">Clear all tickets</button>
-          <span class="sync" id="syncNote"></span>
-          <button class="btn link" id="logoutBtn">Log out</button>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table class="tickets">
-          <thead>
-            <tr><th>#</th><th>Severity</th><th>Ticket</th><th>Issue</th><th>Department</th><th>Reports</th><th>Act within</th><th>Status</th></tr>
-          </thead>
-          <tbody id="ticketRows"></tbody>
-        </table>
-        <div class="board-empty" id="boardEmpty" hidden>
-          <p>No tickets yet. File a complaint, or press <strong>Triage all samples</strong> to load the demo set.</p>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Ticket detail -->
-  <dialog id="detailDlg" class="dlg wide">
-    <div id="detailBody"></div>
-    <form method="dialog" class="dlg-actions"><button class="btn ghost">Close</button></form>
-  </dialog>
+  <footer class="foot"><a href="officer.html">Municipal staff: officer portal</a></footer>
 
   <script src="server-url.js"></script>
   <script src="config.js"></script>
   <script src="rules.js"></script>
   <script src="pipeline.js"></script>
   <script src="samples.js"></script>
-  <script src="app.js"></script>
+  <script src="common.js"></script>
+  <script src="citizen.js"></script>
 </body>
 </html>
